@@ -23,13 +23,31 @@ jobs:
         name: [gcc-13]
 
     steps:
+      - name: Update Apt Cache
+        run: sudo apt update
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: true
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Install software
         run: |
-              sudo apt update && \
               sudo apt install -y gdisk dosfstools g++-12-riscv64-linux-gnu cpp-12-riscv64-linux-gnu build-essential \
                                   libncurses-dev gawk flex bison openssl libssl-dev tree u-boot-tools \
                                   dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf device-tree-compiler \
-                                  libconfuse-dev mtools
+                                  libconfuse-dev mtools binfmt-support qemu-user-static curl wget mmdebstrap \
+                                  debian-archive-keyring debian-keyring debian-ports-archive-keyring
 
       - name: Checkout mkimg
         uses: actions/checkout@v4
@@ -96,6 +114,79 @@ jobs:
               popd
               tree ${GITHUB_WORKSPACE}/output
 
+      - name: Create rootfs
+        run: |
+              wget https://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
+              sudo dpkg -i debian-archive-keyring_2023.4_all.deb
+              BOOT_SIZE=500M
+              ROOT_SIZE=2G
+              BOOT_IMG="boot.ext4"
+              truncate -s "$BOOT_SIZE" "$BOOT_IMG"
+              ROOT_IMG="root.ext4"
+              truncate -s "$ROOT_SIZE" "$ROOT_IMG"
+
+              # Format partitions
+              sudo mkfs.ext4 -F "$BOOT_IMG"
+              sudo mkfs.ext4 -F "$ROOT_IMG"
+              CHROOT_TARGET=${GITHUB_WORKSPACE}/rootfs
+              mkdir "$CHROOT_TARGET"
+              sudo mount "$ROOT_IMG" "$CHROOT_TARGET"
+
+              PACKAGE_LIST="ca-certificates cloud-guest-utils neofetch network-manager debian-archive-keyring u-boot-menu sudo initramfs-tools locales bluez blueman systemd-timesyncd"
+              sudo mmdebstrap --architectures=riscv64 \
+                --include="$PACKAGE_LIST" \
+                sid "$CHROOT_TARGET" \
+                "deb https://deb.debian.org/debian/ sid main contrib non-free non-free-firmware"
+
+              sudo mkdir "$CHROOT_TARGET"/mnt/boot
+              sudo mv -v "$CHROOT_TARGET"/boot/* "$CHROOT_TARGET"/mnt/boot/
+              sudo mount "$BOOT_IMG" "$CHROOT_TARGET"/boot
+              sudo mv -v "$CHROOT_TARGET"/mnt/boot/* "$CHROOT_TARGET"/boot/
+              sudo rm -rf "$CHROOT_TARGET"/mnt/boot
+
+              sudo mount -t proc /proc "$CHROOT_TARGET"/proc
+              sudo mount -B /sys "$CHROOT_TARGET"/sys
+              sudo mount -B /run "$CHROOT_TARGET"/run
+              sudo mount -B /dev "$CHROOT_TARGET"/dev
+              sudo mount -B /dev/pts "$CHROOT_TARGET"/dev/pts
+              sudo mount -t tmpfs tmpfs "$CHROOT_TARGET"/tmp
+              sudo mount -t tmpfs tmpfs "$CHROOT_TARGET"/var/tmp
+              sudo mount -t tmpfs tmpfs "$CHROOT_TARGET"/var/cache/apt/archives/
+              
+              # Set locale to en_US.UTF-8 UTF-8
+              sudo chroot "$CHROOT_TARGET" sh -c "echo 'locales locales/default_environment_locale select en_US.UTF-8' | debconf-set-selections"
+              sudo chroot "$CHROOT_TARGET" sh -c "echo 'locales locales/locales_to_be_generated multiselect en_US.UTF-8 UTF-8' | debconf-set-selections"
+              sudo chroot "$CHROOT_TARGET" sh -c "rm /etc/locale.gen"
+              sudo chroot "$CHROOT_TARGET" sh -c "dpkg-reconfigure --frontend noninteractive locales"
+
+              # Set default timezone to Asia/Shanghai
+              sudo chroot "$CHROOT_TARGET" sh -c "ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime"
+              echo "Asia/Shanghai" | sudo tee $CHROOT_TARGET/etc/timezone
+
+              # Set up fstab
+              echo '/dev/mmcblk0p6 /   auto    defaults    1 1' | sudo tee -a $CHROOT_TARGET/etc/fstab
+              echo '/dev/mmcblk0p5 /boot   auto    defaults    0 0' | sudo tee -a $CHROOT_TARGET/etc/fstab
+
+              # Add user
+              sudo chroot "$CHROOT_TARGET" sh -c "useradd -m -s /bin/bash -G adm,cdrom,floppy,sudo,input,audio,dip,video,plugdev,netdev,bluetooth,lp debian"
+              sudo chroot "$CHROOT_TARGET" sh -c "echo 'debian:debian' | chpasswd"
+
+              # Change hostname
+              echo debian-k1 | sudo tee $CHROOT_TARGET/etc/hostname
+              echo "127.0.1.1 debian-k1" | sudo tee -a /etc/hosts
+
+              # Add update-u-boot config
+              sudo cp -v config/u-boot $CHROOT_TARGET/etc/default/u-boot
+
+              # Update extlinux config
+              sudo chroot "$CHROOT_TARGET" sh -c "u-boot-update"
+
+              # Clean up
+              sudo umount -l "$CHROOT_TARGET"
+
+              # move img to output
+              mv -v "$BOOT_IMG" "$ROOT_IMG" ${GITHUB_WORKSPACE}/output/
+
       - name: genimage-sdcard
         run: |
               export SD_TARGET=${GITHUB_WORKSPACE}/config/genimage.cfg
@@ -108,6 +199,9 @@ jobs:
                 # cp -v *.img ${GITHUB_WORKSPACE}/output/
               popd
               tree ${GITHUB_WORKSPACE}/output
+
+      - name: Clean up ext4
+        run: rm -rf ${GITHUB_WORKSPACE}/output/*.ext4
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v4
