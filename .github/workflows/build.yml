@@ -1,0 +1,117 @@
+name: k1-sdcard
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+env:
+  mainline_toolchain: https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.04.12
+  mainline_toolchain_file_name: riscv64-glibc-ubuntu-22.04-gcc-nightly-2024.04.12-nightly.tar.gz
+  wget_alias: 'wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 0'
+  ARCH: riscv
+  CROSS_COMPILE: riscv64-unknown-linux-gnu-
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [gcc-13]
+
+    steps:
+      - name: Install software
+        run: |
+              sudo apt update && \
+              sudo apt install -y gdisk dosfstools g++-12-riscv64-linux-gnu cpp-12-riscv64-linux-gnu build-essential \
+                                  libncurses-dev gawk flex bison openssl libssl-dev tree u-boot-tools \
+                                  dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf device-tree-compiler \
+                                  libconfuse-dev mtools
+
+      - name: Checkout mkimg
+        uses: actions/checkout@v4
+
+      - name: Checkout genimage
+        uses: actions/checkout@v4
+        with:
+          repository: pengutronix/genimage
+          path: genimage
+          ref: v17
+          
+      - name: build genimage
+        run: |
+            pushd genimage
+              ./autogen.sh
+              ./configure
+              make -j$(nproc)
+              sudo make install
+            popd
+
+      - name: Checkout opensbi
+        uses: actions/checkout@v4
+        with:
+          repository: ruyisdk-debian-riscv/k1-opensbi
+          ref: k1-opensbi
+          path: k1-opensbi
+
+      - name: opensbi compile
+        run: |
+              mkdir output
+              ${wget_alias} ${mainline_toolchain}/${mainline_toolchain_file_name}
+              tar -xvf ${mainline_toolchain_file_name} -C /opt
+              export PATH="/opt/riscv/bin:$PATH"
+              ${CROSS_COMPILE}gcc -v
+
+              pushd ${GITHUB_WORKSPACE}/k1-opensbi
+                make PLATFORM=generic -j`nproc`
+                cp -v build/platform/generic/firmware/fw_dynamic.itb ${GITHUB_WORKSPACE}/output/
+              popd
+              tree ${GITHUB_WORKSPACE}/output
+
+      - name: Checkout uboot
+        uses: actions/checkout@v4
+        with:
+          repository: ruyisdk-debian-riscv/k1-uboot-2022.10
+          ref: drv-dev
+          path: k1-uboot
+
+      - name: uboot compile
+        run: |
+              export PATH="/opt/riscv/bin:$PATH"
+              ${CROSS_COMPILE}gcc -v
+
+              pushd ${GITHUB_WORKSPACE}/k1-uboot
+                make k1_defconfig
+                make -j`nproc`
+
+                # factory
+                mkdir -p ${GITHUB_WORKSPACE}/output/factory
+                cp -v u-boot.itb ${GITHUB_WORKSPACE}/output/
+                cp -v u-boot-env-default.bin ${GITHUB_WORKSPACE}/output/env.bin
+                cp -v bootinfo_*.bin ${GITHUB_WORKSPACE}/output/factory
+                cp -v FSBL.bin ${GITHUB_WORKSPACE}/output/factory
+              popd
+              tree ${GITHUB_WORKSPACE}/output
+
+      - name: genimage-sdcard
+        run: |
+              export SD_TARGET=${GITHUB_WORKSPACE}/config/genimage.cfg
+
+              pushd ${GITHUB_WORKSPACE}/output
+                genimage --config ${SD_TARGET} \
+                  --inputpath $(pwd) \
+                  --outputpath $(pwd) \
+                  --rootpath="$(mktemp -d)"
+                # cp -v *.img ${GITHUB_WORKSPACE}/output/
+              popd
+              tree ${GITHUB_WORKSPACE}/output
+
+      - name: 'Upload Artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: k1-img-${{ matrix.name }}
+          path: output/*
+          retention-days: 30
