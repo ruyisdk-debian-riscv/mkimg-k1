@@ -114,6 +114,22 @@ jobs:
               popd
               tree ${GITHUB_WORKSPACE}/output
 
+      - name: kernel download
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: k1-kernel-gcc-13-k1
+          path: output
+          repo: ruyisdk-debian-riscv/k1-kernel
+          branch: k1-dev
+          workflow: kernel.yml
+          workflow_search: true
+          workflow_conclusion: success
+
+      - name: Remove unused deb
+        run: |
+              rm -rf ${GITHUB_WORKSPACE}/output/linux-image-*-dbg_*_riscv64.deb
+              rm -rf ${GITHUB_WORKSPACE}/output/linux-libc-dev_*_riscv64.deb
+
       - name: Create rootfs
         run: |
               wget https://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
@@ -175,6 +191,10 @@ jobs:
               echo debian-k1 | sudo tee $CHROOT_TARGET/etc/hostname
               echo "127.0.1.1 debian-k1" | sudo tee -a /etc/hosts
 
+              # Install kernel
+              cp -v ${GITHUB_WORKSPACE}/output/*.deb "$CHROOT_TARGET/tmp/"
+              sudo chroot "$CHROOT_TARGET" sh -c "dpkg -i /tmp/*.deb"
+
               # Add update-u-boot config
               sudo cp -v config/u-boot $CHROOT_TARGET/etc/default/u-boot
 
@@ -200,8 +220,10 @@ jobs:
               popd
               tree ${GITHUB_WORKSPACE}/output
 
-      - name: Clean up ext4
-        run: rm -rf ${GITHUB_WORKSPACE}/output/*.ext4
+      - name: Clean up 
+        run: |
+              rm -rf ${GITHUB_WORKSPACE}/output/*.ext4
+              rm -rf ${GITHUB_WORKSPACE}/output/*.deb
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v4
