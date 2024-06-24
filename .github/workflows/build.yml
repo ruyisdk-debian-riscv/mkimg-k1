@@ -125,6 +125,17 @@ jobs:
           workflow_search: true
           workflow_conclusion: success
 
+      - name: kernel download
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          name: k1-kernel-gcc-13-k1
+          path: output
+          repo: ruyisdk-debian-riscv/k1-kernel
+          branch: vendor-v6.1
+          workflow: kernel.yml
+          workflow_search: true
+          workflow_conclusion: success
+
       - name: Remove unused deb
         run: |
               rm -rf ${GITHUB_WORKSPACE}/output/linux-image-*-dbg_*_riscv64.deb
@@ -187,10 +198,6 @@ jobs:
               sudo chroot "$CHROOT_TARGET" sh -c "useradd -m -s /bin/bash -G adm,cdrom,floppy,sudo,input,audio,dip,video,plugdev,netdev,bluetooth,lp debian"
               sudo chroot "$CHROOT_TARGET" sh -c "echo 'debian:debian' | chpasswd"
 
-              # Change hostname
-              echo debian-k1 | sudo tee $CHROOT_TARGET/etc/hostname
-              echo "127.0.1.1 debian-k1" | sudo tee -a /etc/hosts
-
               # Install kernel
               cp -v ${GITHUB_WORKSPACE}/output/*.deb "$CHROOT_TARGET/tmp/"
               sudo chroot "$CHROOT_TARGET" sh -c "dpkg -i /tmp/*.deb"
@@ -200,6 +207,13 @@ jobs:
 
               # Update extlinux config
               sudo chroot "$CHROOT_TARGET" sh -c "u-boot-update"
+
+              # Change hostname
+              echo debian-k1 | sudo tee $CHROOT_TARGET/etc/hostname
+              echo "127.0.1.1 debian-k1" | sudo tee -a /etc/hosts
+
+              # cleanup kernel
+              sudo rm -rf "$CHROOT_TARGET"/root/*.deb
 
               # Clean up
               sudo umount -l "$CHROOT_TARGET"
@@ -222,7 +236,6 @@ jobs:
 
       - name: Clean up 
         run: |
-              rm -rf ${GITHUB_WORKSPACE}/output/*.ext4
               rm -rf ${GITHUB_WORKSPACE}/output/*.deb
 
       - name: 'Upload Artifact'
