@@ -146,7 +146,7 @@ jobs:
               wget https://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
               sudo dpkg -i debian-archive-keyring_2023.4_all.deb
               BOOT_SIZE=500M
-              ROOT_SIZE=2G
+              ROOT_SIZE=3G
               BOOT_IMG="boot.ext4"
               truncate -s "$BOOT_SIZE" "$BOOT_IMG"
               ROOT_IMG="root.ext4"
@@ -211,6 +211,9 @@ jobs:
               # Change hostname
               echo debian-k1 | sudo tee $CHROOT_TARGET/etc/hostname
               echo "127.0.1.1 debian-k1" | sudo tee -a /etc/hosts
+
+              # install ssh
+              sudo chroot "$CHROOT_TARGET" sh -c "apt update && apt install -y ssh"
 
               # cleanup kernel
               sudo rm -rf "$CHROOT_TARGET"/root/*.deb
