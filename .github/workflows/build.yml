@@ -72,7 +72,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ruyisdk-debian-riscv/k1-opensbi
-          ref: vendor-v1.3
+          ref: k1-opensbi
           path: k1-opensbi
 
       - name: opensbi compile
@@ -84,7 +84,7 @@ jobs:
               ${CROSS_COMPILE}gcc -v
 
               pushd ${GITHUB_WORKSPACE}/k1-opensbi
-                make PLATFORM_DEFCONFIG=k1_defconfig PLATFORM=generic -j`nproc`
+                make PLATFORM=generic -j`nproc`
                 cp -v build/platform/generic/firmware/fw_dynamic.itb ${GITHUB_WORKSPACE}/output/
                 cp -v build/platform/generic/firmware/fw_dynamic.elf ${GITHUB_WORKSPACE}/output/
               popd
@@ -132,7 +132,7 @@ jobs:
           name: k1-kernel-gcc-13-k1
           path: output
           repo: ruyisdk-debian-riscv/k1-kernel
-          branch: vendor-v6.1
+          branch: vendor-v6.1-new
           workflow: kernel.yml
           workflow_search: true
           workflow_conclusion: success
