@@ -191,8 +191,8 @@ jobs:
               echo "Asia/Shanghai" | sudo tee $CHROOT_TARGET/etc/timezone
 
               # Set up fstab
-              echo '/dev/mmcblk0p6 /   auto    defaults    1 1' | sudo tee -a $CHROOT_TARGET/etc/fstab
-              echo '/dev/mmcblk0p5 /boot   auto    defaults    0 0' | sudo tee -a $CHROOT_TARGET/etc/fstab
+              echo '/dev/mmcblk2p6 /   auto    defaults    1 1' | sudo tee -a $CHROOT_TARGET/etc/fstab
+              echo '/dev/mmcblk2p5 /boot   auto    defaults    0 0' | sudo tee -a $CHROOT_TARGET/etc/fstab
 
               # Add user
               sudo chroot "$CHROOT_TARGET" sh -c "useradd -m -s /bin/bash -G adm,cdrom,floppy,sudo,input,audio,dip,video,plugdev,netdev,bluetooth,lp debian"
@@ -227,6 +227,9 @@ jobs:
       - name: genimage-sdcard
         run: |
               export SD_TARGET=${GITHUB_WORKSPACE}/config/genimage.cfg
+              export LOOP_DEVICE="/dev/loop100"
+              export SD_NAME=debian-k1-sdcard.img
+              export CHROOT_TARGET=${GITHUB_WORKSPACE}/rootfs
 
               pushd ${GITHUB_WORKSPACE}/output
                 genimage --config ${SD_TARGET} \
@@ -234,10 +237,22 @@ jobs:
                   --outputpath $(pwd) \
                   --rootpath="$(mktemp -d)"
                 # cp -v *.img ${GITHUB_WORKSPACE}/output/
+                sudo losetup -P "${LOOP_DEVICE}" ${SD_NAME}
+                sudo mount "${LOOP_DEVICE}"p6 $CHROOT_TARGET
+                sudo mount "${LOOP_DEVICE}"p5 $CHROOT_TARGET/boot
+                sudo sed -i "s/mmcblk2/mmcblk0/g" $CHROOT_TARGET/etc/fstab
+                sudo sed -i "s/mmcblk2/mmcblk0/g" $CHROOT_TARGET/etc/default/u-boot
+                sudo sed -i "s/mmcblk2/mmcblk0/g" $CHROOT_TARGET/boot/extlinux/extlinux.conf
+                sudo umount -l $CHROOT_TARGET
+                sudo losetup -d "${LOOP_DEVICE}"
               popd
               tree ${GITHUB_WORKSPACE}/output
 
-      - name: Clean up 
+      - name: Copy other file
+        run: |
+              cp -vf ${GITHUB_WORKSPACE}/config/partition_universal.json ${GITHUB_WORKSPACE}/output/
+
+      - name: Clean up
         run: |
               rm -rf ${GITHUB_WORKSPACE}/output/*.deb
 

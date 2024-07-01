@@ -1,5 +1,5 @@
 U_BOOT_PROMPT="2"
 U_BOOT_MENU_LABEL="Debian GNU/Linux"
-U_BOOT_PARAMETERS="console=tty1 console=ttyS0,115200 root=/dev/mmcblk0p6 rootfstype=ext4 rootwait rw earlycon=sbi selinux=0 clk_ignore_unused swiotlb=65536 LANG=en_US.UTF-8"
-U_BOOT_ROOT="root=/dev/mmcblk0p6"
+U_BOOT_PARAMETERS="console=tty1 console=ttyS0,115200 root=/dev/mmcblk2p6 rootfstype=ext4 rootwait rw earlycon=sbi selinux=0 clk_ignore_unused swiotlb=65536 LANG=en_US.UTF-8"
+U_BOOT_ROOT="root=/dev/mmcblk2p6"
 U_BOOT_FDT_DIR="/dtbs/linux-image-"
