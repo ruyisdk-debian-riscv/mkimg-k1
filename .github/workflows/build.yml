@@ -125,17 +125,6 @@ jobs:
           workflow_search: true
           workflow_conclusion: success
 
-      - name: kernel download
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          name: k1-kernel-gcc-13-k1
-          path: output
-          repo: ruyisdk-debian-riscv/k1-kernel
-          branch: vendor-v6.1
-          workflow: kernel.yml
-          workflow_search: true
-          workflow_conclusion: success
-
       - name: Remove unused deb
         run: |
               rm -rf ${GITHUB_WORKSPACE}/output/linux-image-*-dbg_*_riscv64.deb
