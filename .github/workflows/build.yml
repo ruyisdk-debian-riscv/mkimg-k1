@@ -209,6 +209,13 @@ jobs:
               popd
               tree ${GITHUB_WORKSPACE}/output
 
+      - name: 'Upload sdcard img'
+        uses: actions/upload-artifact@v4
+        with:
+          name: k1-img-sdcard
+          path: output/debian-k1-sdcard.img
+          retention-days: 30
+
       - name: Copy other file
         run: |
               cp -vf ${GITHUB_WORKSPACE}/config/partition_universal.json ${GITHUB_WORKSPACE}/output/
@@ -216,10 +223,11 @@ jobs:
       - name: Clean up
         run: |
               rm -rf ${GITHUB_WORKSPACE}/output/*.deb
+              rm -rf ${GITHUB_WORKSPACE}/output/debian-k1-sdcard.img
 
-      - name: 'Upload Artifact'
+      - name: 'Upload emmc img'
         uses: actions/upload-artifact@v4
         with:
-          name: k1-img-${{ matrix.name }}
+          name: k1-img-emmc
           path: output/*
           retention-days: 30
