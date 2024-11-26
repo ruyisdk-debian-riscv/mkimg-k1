@@ -68,7 +68,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ruyisdk-debian-riscv/k1-uboot-2022.10
-          ref: drv-dev
+          ref: bl-v2.0.y-ext
           path: k1-uboot
 
       - name: uboot compile
@@ -171,7 +171,7 @@ jobs:
 
               # Change hostname
               echo debian-k1 | sudo tee $CHROOT_TARGET/etc/hostname
-              echo "127.0.1.1 debian-k1" | sudo tee -a /etc/hosts
+              echo "127.0.1.1 debian-k1" | sudo tee -a $CHROOT_TARGET/etc/hosts
 
               # install ssh
               sudo chroot "$CHROOT_TARGET" sh -c "apt update && apt install -y ssh"
