@@ -8,19 +8,13 @@ on:
     - cron: "0 2 * * *"
 
 env:
-  mainline_toolchain: https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.04.12
-  mainline_toolchain_file_name: riscv64-glibc-ubuntu-22.04-gcc-nightly-2024.04.12-nightly.tar.gz
   wget_alias: 'wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 0'
   ARCH: riscv
-  CROSS_COMPILE: riscv64-unknown-linux-gnu-
+  CROSS_COMPILE: riscv64-linux-gnu-
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        name: [gcc-13]
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Update Apt Cache
@@ -43,30 +37,14 @@ jobs:
 
       - name: Install software
         run: |
-              sudo apt install -y gdisk dosfstools g++-12-riscv64-linux-gnu cpp-12-riscv64-linux-gnu build-essential \
+              sudo apt install -y gdisk dosfstools g++-riscv64-linux-gnu cpp-riscv64-linux-gnu build-essential \
                                   libncurses-dev gawk flex bison openssl libssl-dev tree u-boot-tools \
                                   dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf device-tree-compiler \
                                   libconfuse-dev mtools binfmt-support qemu-user-static curl wget mmdebstrap \
-                                  debian-archive-keyring debian-keyring debian-ports-archive-keyring
+                                  debian-archive-keyring debian-keyring debian-ports-archive-keyring genimage
 
       - name: Checkout mkimg
         uses: actions/checkout@v4
-
-      - name: Checkout genimage
-        uses: actions/checkout@v4
-        with:
-          repository: pengutronix/genimage
-          path: genimage
-          ref: v17
-          
-      - name: build genimage
-        run: |
-            pushd genimage
-              ./autogen.sh
-              ./configure
-              make -j$(nproc)
-              sudo make install
-            popd
 
       - name: Checkout opensbi
         uses: actions/checkout@v4
@@ -78,9 +56,6 @@ jobs:
       - name: opensbi compile
         run: |
               mkdir output
-              ${wget_alias} ${mainline_toolchain}/${mainline_toolchain_file_name}
-              tar -xvf ${mainline_toolchain_file_name} -C /opt
-              export PATH="/opt/riscv/bin:$PATH"
               ${CROSS_COMPILE}gcc -v
 
               pushd ${GITHUB_WORKSPACE}/k1-opensbi
@@ -98,9 +73,6 @@ jobs:
 
       - name: uboot compile
         run: |
-              export PATH="/opt/riscv/bin:$PATH"
-              ${CROSS_COMPILE}gcc -v
-
               pushd ${GITHUB_WORKSPACE}/k1-uboot
                 make k1_defconfig
                 make -j`nproc`
@@ -120,7 +92,7 @@ jobs:
           name: k1-kernel-gcc-13-k1
           path: output
           repo: ruyisdk-debian-riscv/k1-kernel
-          branch: k1-dev
+          branch: k1-6.12.y
           workflow: kernel.yml
           workflow_search: true
           workflow_conclusion: success
