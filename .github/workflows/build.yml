@@ -11,6 +11,10 @@ env:
   wget_alias: 'wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -t 0'
   ARCH: riscv
   CROSS_COMPILE: riscv64-linux-gnu-
+  BOOT_SIZE: 500M
+  ROOT_SIZE: 3G
+  BOOT_IMG: boot.ext4
+  ROOT_IMG: root.ext4
 
 jobs:
   build:
@@ -106,11 +110,7 @@ jobs:
         run: |
               wget https://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
               sudo dpkg -i debian-archive-keyring_2023.4_all.deb
-              BOOT_SIZE=500M
-              ROOT_SIZE=3G
-              BOOT_IMG="boot.ext4"
               truncate -s "$BOOT_SIZE" "$BOOT_IMG"
-              ROOT_IMG="root.ext4"
               truncate -s "$ROOT_SIZE" "$ROOT_IMG"
 
               # Format partitions
@@ -140,7 +140,7 @@ jobs:
               sudo mount -t tmpfs tmpfs "$CHROOT_TARGET"/tmp
               sudo mount -t tmpfs tmpfs "$CHROOT_TARGET"/var/tmp
               sudo mount -t tmpfs tmpfs "$CHROOT_TARGET"/var/cache/apt/archives/
-              
+
               # Set locale to en_US.UTF-8 UTF-8
               sudo chroot "$CHROOT_TARGET" sh -c "echo 'locales locales/default_environment_locale select en_US.UTF-8' | debconf-set-selections"
               sudo chroot "$CHROOT_TARGET" sh -c "echo 'locales locales/locales_to_be_generated multiselect en_US.UTF-8 UTF-8' | debconf-set-selections"
@@ -185,6 +185,21 @@ jobs:
               # move img to output
               mv -v "$BOOT_IMG" "$ROOT_IMG" ${GITHUB_WORKSPACE}/output/
 
+      - name: Copy other file
+        run: |
+              cp -vf ${GITHUB_WORKSPACE}/config/partition_universal.json ${GITHUB_WORKSPACE}/output/
+
+      - name: Clean up (EMMC)
+        run: |
+              rm -rf ${GITHUB_WORKSPACE}/output/*.deb
+
+      - name: 'Upload emmc img'
+        uses: actions/upload-artifact@v4
+        with:
+          name: k1-img-emmc
+          path: output/*
+          retention-days: 30
+
       - name: genimage-sdcard
         run: |
               export SD_TARGET=${GITHUB_WORKSPACE}/config/genimage.cfg
@@ -216,18 +231,27 @@ jobs:
           path: output/debian-k1-sdcard.img
           retention-days: 30
 
-      - name: Copy other file
+      - name: Clean up (SDCARD)
         run: |
-              cp -vf ${GITHUB_WORKSPACE}/config/partition_universal.json ${GITHUB_WORKSPACE}/output/
-
-      - name: Clean up
-        run: |
-              rm -rf ${GITHUB_WORKSPACE}/output/*.deb
               rm -rf ${GITHUB_WORKSPACE}/output/debian-k1-sdcard.img
 
-      - name: 'Upload emmc img'
+      - name: genimage-nvme
+        run: |
+              export CHROOT_TARGET=${GITHUB_WORKSPACE}/rootfs
+
+              pushd ${GITHUB_WORKSPACE}/output
+                sudo mount "$ROOT_IMG" $CHROOT_TARGET
+                sudo mount "$BOOT_IMG" $CHROOT_TARGET/boot
+                sudo sed -i "s/mmcblk2/nvme0n1/g" $CHROOT_TARGET/etc/fstab
+                sudo sed -i "s/mmcblk2/nvme0n1/g" $CHROOT_TARGET/etc/default/u-boot
+                sudo sed -i "s/mmcblk2/nvme0n1/g" $CHROOT_TARGET/boot/extlinux/extlinux.conf
+                sudo umount -l $CHROOT_TARGET
+              popd
+              tree ${GITHUB_WORKSPACE}/output
+
+      - name: 'Upload nvme img'
         uses: actions/upload-artifact@v4
         with:
-          name: k1-img-emmc
+          name: k1-img-nvme
           path: output/*
           retention-days: 30
