@@ -235,6 +235,30 @@ jobs:
         run: |
               rm -rf ${GITHUB_WORKSPACE}/output/debian-k1-sdcard.img
 
+      - name: genimage-sdcard-boot
+        run: |
+              export SD_TARGET=${GITHUB_WORKSPACE}/config/genimage_boot.cfg
+              export SD_NAME=k1-sdcard-boot.img
+
+              pushd ${GITHUB_WORKSPACE}/output
+                genimage --config ${SD_TARGET} \
+                  --inputpath $(pwd) \
+                  --outputpath $(pwd) \
+                  --rootpath="$(mktemp -d)"
+              popd
+              tree ${GITHUB_WORKSPACE}/output
+
+      - name: 'Upload sdcard boot img'
+        uses: actions/upload-artifact@v4
+        with:
+          name: k1-sdcard-boot-nvme
+          path: output/k1-sdcard-boot.img
+          retention-days: 30
+
+      - name: Clean up (SDCARD BOOT)
+        run: |
+              rm -rf ${GITHUB_WORKSPACE}/output/k1-sdcard-boot.img
+
       - name: genimage-nvme
         run: |
               export CHROOT_TARGET=${GITHUB_WORKSPACE}/rootfs
