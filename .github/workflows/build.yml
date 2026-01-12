@@ -54,7 +54,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ruyisdk-debian-riscv/k1-opensbi
-          ref: k1-opensbi
+          ref: k1-rva23
           path: k1-opensbi
 
       - name: opensbi compile
@@ -63,7 +63,7 @@ jobs:
               ${CROSS_COMPILE}gcc -v
 
               pushd ${GITHUB_WORKSPACE}/k1-opensbi
-                make PLATFORM=generic -j`nproc`
+                make PLATFORM_DEFCONFIG=k1_defconfig PLATFORM=generic -j`nproc`
                 cp -v build/platform/generic/firmware/fw_dynamic.itb ${GITHUB_WORKSPACE}/output/
               popd
               tree ${GITHUB_WORKSPACE}/output
@@ -93,11 +93,11 @@ jobs:
       - name: kernel download
         uses: dawidd6/action-download-artifact@v6
         with:
-          name: k1-kernel-gcc-13-k1
+          name: kernel-native-revyos
           path: output
-          repo: ruyisdk-debian-riscv/k1-kernel
-          branch: k1-6.12.y
-          workflow: kernel.yml
+          repo: revyos/linux
+          branch: revyos/6.18.y
+          workflow: native-build.yml
           workflow_search: true
           workflow_conclusion: success
 
@@ -108,8 +108,8 @@ jobs:
 
       - name: Create rootfs
         run: |
-              wget https://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2023.4_all.deb
-              sudo dpkg -i debian-archive-keyring_2023.4_all.deb
+              wget https://deb.debian.org/debian/pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb
+              sudo dpkg -i debian-archive-keyring_2025.1_all.deb
               truncate -s "$BOOT_SIZE" "$BOOT_IMG"
               truncate -s "$ROOT_SIZE" "$ROOT_IMG"
 
@@ -120,11 +120,12 @@ jobs:
               mkdir "$CHROOT_TARGET"
               sudo mount "$ROOT_IMG" "$CHROOT_TARGET"
 
-              PACKAGE_LIST="ca-certificates cloud-guest-utils neofetch network-manager debian-archive-keyring u-boot-menu sudo initramfs-tools locales bluez blueman systemd-timesyncd"
+              PACKAGE_LIST="ca-certificates cloud-guest-utils fastfetch network-manager debian-archive-keyring u-boot-menu sudo initramfs-tools locales bluez blueman systemd-timesyncd"
               sudo mmdebstrap --architectures=riscv64 \
                 --include="$PACKAGE_LIST" \
-                sid "$CHROOT_TARGET" \
-                "deb https://deb.debian.org/debian/ sid main contrib non-free non-free-firmware"
+                trixie "$CHROOT_TARGET" \
+                "deb https://deb.debian.org/debian/ trixie main contrib non-free non-free-firmware" \
+                "deb https://deb.debian.org/debian-security/ trixie-security main contrib non-free non-free-firmware"
 
               sudo mkdir "$CHROOT_TARGET"/mnt/boot
               sudo mv -v "$CHROOT_TARGET"/boot/* "$CHROOT_TARGET"/mnt/boot/
@@ -152,8 +153,8 @@ jobs:
               echo "Asia/Shanghai" | sudo tee $CHROOT_TARGET/etc/timezone
 
               # Set up fstab
-              echo '/dev/mmcblk2p6 /   auto    defaults    1 1' | sudo tee -a $CHROOT_TARGET/etc/fstab
-              echo '/dev/mmcblk2p5 /boot   auto    defaults    0 0' | sudo tee -a $CHROOT_TARGET/etc/fstab
+              echo '/dev/mmcblk0p6 /   auto    defaults    1 1' | sudo tee -a $CHROOT_TARGET/etc/fstab
+              echo '/dev/mmcblk0p5 /boot   auto    defaults    0 0' | sudo tee -a $CHROOT_TARGET/etc/fstab
 
               # Add user
               sudo chroot "$CHROOT_TARGET" sh -c "useradd -m -s /bin/bash -G adm,cdrom,floppy,sudo,input,audio,dip,video,plugdev,netdev,bluetooth,lp debian"
@@ -161,6 +162,8 @@ jobs:
 
               # Install kernel
               cp -v ${GITHUB_WORKSPACE}/output/*.deb "$CHROOT_TARGET/tmp/"
+              wget https://fast-mirror.isrc.ac.cn/revyos/trixie/revyos-addons/pool/main/u/u-boot-fdtdir-dtb/u-boot-fdtdir-dtb_0revyos1_all.deb
+              cp -v u-boot-fdtdir-dtb_0revyos1_all.deb "$CHROOT_TARGET/tmp/"
               sudo chroot "$CHROOT_TARGET" sh -c "dpkg -i /tmp/*.deb"
 
               # Add update-u-boot config
@@ -216,9 +219,9 @@ jobs:
                 sudo losetup -P "${LOOP_DEVICE}" ${SD_NAME}
                 sudo mount "${LOOP_DEVICE}"p6 $CHROOT_TARGET
                 sudo mount "${LOOP_DEVICE}"p5 $CHROOT_TARGET/boot
-                sudo sed -i "s/mmcblk2/mmcblk0/g" $CHROOT_TARGET/etc/fstab
-                sudo sed -i "s/mmcblk2/mmcblk0/g" $CHROOT_TARGET/etc/default/u-boot
-                sudo sed -i "s/mmcblk2/mmcblk0/g" $CHROOT_TARGET/boot/extlinux/extlinux.conf
+                sudo sed -i "s/mmcblk0/mmcblk1/g" $CHROOT_TARGET/etc/fstab
+                sudo sed -i "s/mmcblk0/mmcblk1/g" $CHROOT_TARGET/etc/default/u-boot
+                sudo sed -i "s/mmcblk0/mmcblk1/g" $CHROOT_TARGET/boot/extlinux/extlinux.conf
                 sudo umount -l $CHROOT_TARGET
                 sudo losetup -d "${LOOP_DEVICE}"
               popd
@@ -266,9 +269,9 @@ jobs:
               pushd ${GITHUB_WORKSPACE}/output
                 sudo mount "$ROOT_IMG" $CHROOT_TARGET
                 sudo mount "$BOOT_IMG" $CHROOT_TARGET/boot
-                sudo sed -i "s/mmcblk2/nvme0n1/g" $CHROOT_TARGET/etc/fstab
-                sudo sed -i "s/mmcblk2/nvme0n1/g" $CHROOT_TARGET/etc/default/u-boot
-                sudo sed -i "s/mmcblk2/nvme0n1/g" $CHROOT_TARGET/boot/extlinux/extlinux.conf
+                sudo sed -i "s/mmcblk0/nvme0n1/g" $CHROOT_TARGET/etc/fstab
+                sudo sed -i "s/mmcblk0/nvme0n1/g" $CHROOT_TARGET/etc/default/u-boot
+                sudo sed -i "s/mmcblk0/nvme0n1/g" $CHROOT_TARGET/boot/extlinux/extlinux.conf
                 sudo umount -l $CHROOT_TARGET
               popd
               tree ${GITHUB_WORKSPACE}/output
