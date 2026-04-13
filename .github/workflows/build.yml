@@ -89,12 +89,12 @@ jobs:
               tree ${GITHUB_WORKSPACE}/output
 
       - name: kernel download
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v20
         with:
           name: kernel-native-revyos
           path: output
           repo: revyos/linux
-          branch: revyos/6.18.y
+          branch: revyos/7.0.y
           workflow: native-build.yml
           workflow_search: true
           workflow_conclusion: success
